@@ -1,50 +1,58 @@
 # DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning
-
-**Paper:** DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning
-\
-**Authors:** Joshua Ainslie, James Lee-Thorp, Michiel de Jong, Yury Zemlyanskiy, Federico Lebrón, Sumit Sanghai (Google Research)  
-**Conference:** EMNLP 2023  
-**ArXiv:** https://arxiv.org/abs/2305.13245
-
-**Presented by:** Zhiqi(Camille) Zhang
-**Date:** Thursday, October 30, 2025
 ---
+**Paper**: DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning  
+**Authors:** Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song (DeepSeek Research Team)    
+**ArXiv:** [https://arxiv.org/abs/2305.13245  ](https://arxiv.org/abs/2501.12948)  
+**Presented by:** Zhiqi(Camille) Zhang  
+**Date:** Thursday, October 30, 2025  
 
-## 1. Introduction and Motivation
-
-Large Language Models (LLMs) have shown remarkable performance in text generation, yet **true reasoning** remains their weakest point.  
-Most reasoning models rely heavily on **Supervised Fine-Tuning (SFT)** with labeled *Chain-of-Thought (CoT)* data, which is expensive and limits the model’s ability to generalize.
-
-The **DeepSeek-R1 project** rethinks this paradigm.  
-It explores a bold question:
-
-> 🧠 *Can reasoning ability emerge purely through Reinforcement Learning (RL), without supervision?*
-
+## Overview
 ---
+### Context
+Imagine you are solving a tough math problem. At first, you try a direct approach, fail, then pause, reflect, and rethink your strategy. That little internal dialogue like “Wait, that doesn’t seem right… let’s try another way” is what we call **reasoning**.  
 
-### From R1-Zero to R1 — The Evolution of Reasoning
+Modern language models are beginning to mimic this process. OpenAI recently introduced the idea of **inference-time scaling**, where a model can “think longer” by extending its **Chain-of-Thought (CoT)** during test time. The longer the reasoning chain, the more likely the model is to reach a correct, verifiable conclusion.  
 
-| Stage | Model | Core Idea | Key Features |
-|--------|--------|------------|---------------|
-| **1** | **R1-Zero** | *Reasoning through pure RL (no supervision)* | GRPO algorithm; rule-based rewards; “aha moment” emergent reasoning |
-| **2** | **R1** | *Hybrid multi-stage pipeline (SFT + RL)* | Cold-start data, multi-round RL fine-tuning, readability and human alignment |
-| **3** | **R1-Distill** | *Transferring reasoning to smaller models* | Knowledge distillation to Qwen & Llama (1.5B–70B) |
+This simple trick letting models reason for more steps has brought dramatic improvements across domains such as mathematics, programming, and scientific reasoning.  
+However, it also raises a deeper question:  
 
-The development from **R1-Zero → R1 → R1-Distill** mirrors the journey from *raw emergent intelligence* to *refined, teachable reasoning*.
+> *Can a model learn when and how to think—without humans manually scripting its reasoning patterns?*
+---
+### Problem Statement: The Challenge of Effective Test-Time Reasoning
+Despite the progress of inference-time scaling, the **research community still lacks an effective method** to control and extend reasoning at test time. The difficulty lies in how to train models that can *self-decide* when to explore deeper reasoning paths.
+
+Previous efforts have tried several directions:
+- **Process-based Reward Models (PRM):** assign feedback for each reasoning step,  but they require fine-grained annotation and often fall into *reward hacking*.
+- **Search Algorithms (e.g., MCTS or Beam Search):** imitate AlphaGo’s exploration strategy, yet token-level search spaces make them computationally infeasible at scale.
+- **Hybrid Reinforcement Learning Approaches:** combine supervised labels and RL signals, but they depend heavily on expensive labeled data.
+
+As these methods struggle, researchers began to ask:  
+> “What if reasoning could *emerge naturally* through reinforcement learning alone?”
 
 ---
+### How the problem was Addressed: From R1-Zero to R1 to R1-Distill
+> Why Post-Training?  
+> Improved reasoning accuracy, human-aligned behavior, efficiency
+
+This paper answers that question by designing a **comprehensive post-training pipeline** centered on **pure Reinforcement Learning (RL)**, a process that allows a pre-trained language model to refine its reasoning ability without additional supervised data. At the heart of this work implemented through a custom algorithm called **Group Relative Policy Optimization (GRPO)**. A remarkable finding is that, even **without any supervised fine-tuning (SFT)**, the model can self-evolve into a reasoning agent purely through RL feedback. The base model (DeepSeek-V3-Base) starts with general linguistic capability but no explicit reasoning structure.  
+
+| Stage | Model | Core Mechanism | Strengths | Limitations |
+|:------|:-------|:---------------|:-----------|:-------------|
+| **1** | **DeepSeek-R1-Zero** | Applies pure Reinforcement Learning on DeepSeek-V3-Base using GRPO | Emergent self-reflection, spontaneous long CoT reasoning, major benchmark gains | Low readability, language mixing |
+| **2** | **DeepSeek-R1** | Adds cold-start SFT data + multi-stage RL pipeline | Improves coherence and stability, matches OpenAI o1-1217 performance | Higher training cost |
+| **3** | **DeepSeek-R1-Distill** | Distills R1’s reasoning into smaller dense models (Qwen / Llama) | Efficient, low-cost reasoning comparable to larger models | Slight drop on hardest benchmarks |
 
 ![Figure: DeepSeek-R1 Evolution Overview](images/r1_evolution_diagram.png)
-> **Figure Suggestion:**  
-> A flow diagram showing the 3 stages:  
-> **R1-Zero (pure RL)** → **R1 (multi-stage hybrid)** → **R1-Distill (small models)**,  
-> annotated with key techniques (GRPO, rejection sampling, distillation).
 
+#### Model Performance
+- DeepSeek-R1-Zero, achieves **71% → 86.7%** (with majority voting) on AIME 2024, rivaling OpenAI-o1-0912.  
+- DeepSeek-R1, using a hybrid SFT+RL pipeline, reaches 79.8% on AIME and **95.6%** on MATH-500, surpassing o1-1217.  
+- Distilled versions, such as R1-Distill-Qwen-14B, maintain similar reasoning ability while cutting inference cost dramatically.  
 ---
 
-## ⚙️ 2. Technical Approach
+## Model Architecture
 
-### 2.1 Group Relative Policy Optimization (GRPO)
+### DeepSeek-R1-Zero & Group Relative Policy Optimization (GRPO)
 
 DeepSeek introduces **GRPO**, a modification of PPO that removes the need for a critic network.
 
