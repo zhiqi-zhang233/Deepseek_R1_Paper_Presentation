@@ -17,7 +17,7 @@ This simple trick letting models reason for more steps has brought dramatic impr
 
 However, it also raises a deeper question:  
 
-> Can a model learn when and how to think—without humans manually scripting its reasoning patterns?
+> Can a model learn when and how to think without humans manually scripting its reasoning patterns?
 ---
 ### Problem Statement: The Challenge of Effective Test-Time Reasoning
 Despite the progress of inference-time scaling, the research community still lacks an effective method to control and extend reasoning at test time. The difficulty lies in how to train models that can self-decide when to explore deeper reasoning paths.
@@ -26,9 +26,6 @@ Previous efforts have tried several directions:
 - **Process-based Reward Models (PRM):** assign feedback for each reasoning step,  but they require fine-grained annotation and often fall into *reward hacking*.
 - **Search Algorithms (e.g., MCTS or Beam Search):** imitate AlphaGo’s exploration strategy, yet token-level search spaces make them computationally infeasible at scale.
 - **Hybrid Reinforcement Learning Approaches:** combine supervised labels and RL signals, but they depend heavily on expensive labeled data.
-
-As these methods struggle, researchers began to ask:  
-> “What if reasoning could *emerge naturally* through reinforcement learning alone?”
 
 ---
 ### How the problem was Addressed: From R1-Zero to R1 to R1-Distill
