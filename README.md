@@ -14,12 +14,13 @@ Imagine you are solving a tough math problem. At first, you try a direct approac
 Modern language models are beginning to mimic this process. OpenAI recently introduced the idea of **inference-time scaling**, where a model can “think longer” by extending its **Chain-of-Thought (CoT)** during test time. The longer the reasoning chain, the more likely the model is to reach a correct, verifiable conclusion.  
 
 This simple trick letting models reason for more steps has brought dramatic improvements across domains such as mathematics, programming, and scientific reasoning.  
+
 However, it also raises a deeper question:  
 
-> *Can a model learn when and how to think—without humans manually scripting its reasoning patterns?*
+> Can a model learn when and how to think—without humans manually scripting its reasoning patterns?
 ---
 ### Problem Statement: The Challenge of Effective Test-Time Reasoning
-Despite the progress of inference-time scaling, the **research community still lacks an effective method** to control and extend reasoning at test time. The difficulty lies in how to train models that can *self-decide* when to explore deeper reasoning paths.
+Despite the progress of inference-time scaling, the research community still lacks an effective method to control and extend reasoning at test time. The difficulty lies in how to train models that can self-decide when to explore deeper reasoning paths.
 
 Previous efforts have tried several directions:
 - **Process-based Reward Models (PRM):** assign feedback for each reasoning step,  but they require fine-grained annotation and often fall into *reward hacking*.
@@ -62,7 +63,6 @@ Instead of learning from human-annotated reasoning chains, the model learns thro
 **Components Used:**
 - **GRPO (Group Relative Policy Optimization)** — a lightweight reinforcement learning algorithm.  
 - **Reward Model** — evaluates whether each answer is accurate and well-formatted.  
----
 
 #### GRPO
 
@@ -122,8 +122,6 @@ Then, GRPO compares answers within each batch and reinforces the better ones. Ov
 **Goal:**
 Make R1-Zero’s powerful reasoning more readable, aligned, and human-like.
 
----
-
 #### Training Enhancements
 
 1. **Cold Start (Supervised Fine-Tuning):**
@@ -156,12 +154,25 @@ By alternating between **SFT (human clarity)** and **RL (self-improvement)**, R1
 
 ---
 
+### Question 2: 
+DeepSeek-R1-Zero achieved impressive reasoning but still showed issues like unreadable outputs and mixed-language reasoning. What specific improvements in DeepSeek-R1 addressed these weaknesses, and how did they make the reasoning more stable and human-aligned?
+
+<details>
+<summary>Click to reveal the answer</summary>
+
+DeepSeek-R1 fixed the main weaknesses of R1-Zero through a multi-stage hybrid training pipeline.  
+1. It first added a cold-start supervised fine-tuning step using a few thousand curated reasoning examples.  
+   This taught the model to follow clear, readable reasoning structures.  
+2. It then re-applied reinforcement learning to enhance accuracy and logical depth while keeping that clarity.  
+3. Finally, a rejection-sampling fine-tuning stage filtered only the highest-quality reasoning traces for further training.  
+</details>
+
+---
+
 ### DeepSeek-R1-Distill: Teaching Smaller Models to Reason
 
 **Goal:**
 Transfer the reasoning ability of large R1 models to smaller dense models like **Qwen** and **Llama**, making reasoning affordable and accessible.
-
----
 
 #### Distillation Process
 
@@ -182,8 +193,6 @@ Transfer the reasoning ability of large R1 models to smaller dense models like *
 This shows that distilled models, though smaller, **outperform many larger non-reasoning LLMs** like GPT-4o.
 
 ---
-
-### Question 2: 
 
 ## Impacts
 
