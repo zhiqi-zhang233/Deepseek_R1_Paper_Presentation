@@ -42,7 +42,7 @@ This paper answers that question by designing a **comprehensive post-training pi
 | **2** | **DeepSeek-R1** | Adds cold-start SFT data + multi-stage RL pipeline | Improves coherence and stability, matches OpenAI o1-1217 performance | Higher training cost |
 | **3** | **DeepSeek-R1-Distill** | Distills R1’s reasoning into smaller dense models (Qwen / Llama) | Efficient, low-cost reasoning comparable to larger models | Slight drop on hardest benchmarks |
 
-![Figure: DeepSeek-R1 Evolution Overview](flowchart.png)
+![image](image1.png)
 
 #### Model Performance
 - DeepSeek-R1-Zero, achieves **71% → 86.7%** (with majority voting) on AIME 2024, rivaling OpenAI-o1-0912.  
@@ -52,160 +52,124 @@ This paper answers that question by designing a **comprehensive post-training pi
 
 ## Model Architecture
 
-### DeepSeek-R1-Zero & Group Relative Policy Optimization (GRPO)
-
-DeepSeek introduces **GRPO**, a modification of PPO that removes the need for a critic network.
+### DeepSeek-R1-Zero: Group Relative Policy Optimization (GRPO)
+**Goal:**  
+Teach a pre-trained model (DeepSeek-V3-Base) to reason logically without any supervised labels.
 
 **Key Idea:**  
-Each batch of responses to the same question is evaluated **relatively**—the model learns from the *best responses in its own group*.
+Instead of learning from human-annotated reasoning chains, the model learns through reward signals that tell it which answers are better.
 
-\[
-A_i = \frac{r_i - \bar{r}}{s_r}
-\]
+**Components Used:**
+- **GRPO (Group Relative Policy Optimization)** — a lightweight reinforcement learning algorithm.  
+- **Reward Model** — evaluates whether each answer is accurate and well-formatted.  
+---
 
-\[
-L = \mathbb{E}_i[\min(r_i(\theta)A_i, \text{clip}(r_i(\theta), 1 - \epsilon, 1 + \epsilon)A_i)] - \beta \cdot KL(\pi_\theta \| \pi_{\text{old}})
-\]
+#### GRPO
+
+```text
+Input: Pre-trained model πθ (DeepSeek-V3-Base)
+Repeat for each batch of prompts Q:
+    For each question q in Q:
+        1. Generate G possible answers {o₁, o₂, ..., o_G}
+        2. Compute reward for each answer:
+            - Accuracy reward: Is the answer correct?
+            - Format reward: Does it use <think>...</think> structure?
+        3. Compute relative advantage Aᵢ = (rᵢ - mean(r)) / std(r)
+        4. Update model parameters θ using:
+               J(θ) = E[min(r(θ)*A, clip(r(θ), 1−ε, 1+ε)*A)] − β * KL(πθ || πref)
+Output: Updated model πθ'
+````
+The model generates multiple answers, compares them to each other, learns which one is “better,” and updates itself accordingly.
+
+#### Reward Model
+In DeepSeek-R1-Zero, the reward model replaces human supervision by automatically scoring each generated answer. It uses two simple rule-based signals: an **accuracy reward**, which checks if the final answer is correct, and a **format reward**, which ensures the reasoning process follows the `<think>...</think>` structure. Unlike neural reward models that require human feedback and risk reward hacking, this rule-based setup is lightweight, objective, and scalable. Together with GRPO, it lets the model learn from its own outputs—gradually reinforcing clearer, more logical reasoning without any labeled data.
+
+#### Emergent “Aha Moment”
+
+During training, DeepSeek-R1-Zero began to display fascinating self-reflective reasoning behaviors.
+At times, it paused, questioned its own logic, and revised previous steps just like a human realizing a mistake.
+
+Example:
+
+> “Wait, that seems wrong. Let’s check the equation again…”
+
+This spontaneous self-correction, called the **“Aha Moment”**, was not programmed. It emerged naturally from reinforcement learning.
+
+![image](image2.png)
+---
+
+#### Outcome
+
+- **Emergent Reasoning:** Model develops structured, multi-step logical reasoning.
+- **Performance:** On AIME 2024, R1-Zero improved from 15.6% → **71%** pass@1 accuracy.
+- **Limitation:** Outputs were sometimes verbose or mixed languages; reasoning lacked readability.
 
 ---
 
-### 2.2 Reward Design
+### DeepSeek-R1: Hybrid SFT + RL
 
-- **Accuracy Reward:** checks correctness of final answer (e.g., math results, code outputs).  
-- **Format Reward:** enforces clean reasoning structure within `<think>` … `</think>` tags.  
-- **Language Reward:** ensures single-language reasoning (avoids English–Chinese mixing).  
-
-![Figure: RL Training Loop](images/grpo_training_loop.png)  
-> **Figure Suggestion:** show RL loop with *prompt → multiple responses → reward → policy update*.
+**Goal:**
+Make R1-Zero’s powerful reasoning more readable, aligned, and human-like.
 
 ---
 
-### 2.3 R1-Zero’s Self-Evolution & “Aha Moment”
+#### Training Enhancements
 
-Without any supervision, **R1-Zero** starts producing longer and more structured reasoning chains.  
-It *spontaneously learns* to reflect, revise steps, and even express realization moments:
+1. **Cold Start (Supervised Fine-Tuning):**
+   Use a few thousand manually curated long reasoning examples to initialize the model.
 
-> *“Wait… that seems wrong. Let’s reconsider.”*
+   * Helps stabilize early RL learning.
+   * Introduces clear reasoning format and readable English.
 
-This behavior emerges **solely from reward signals**, not from any human example —  
-a genuine *emergent reasoning phenomenon*.
+2. **Reinforcement Learning with Cold Start:**
+   Apply the same GRPO process, but now starting from a stable checkpoint.
 
-![Figure: Aha Moment Example](images/aha_example.png)  
-> **Figure Suggestion:** side-by-side text showing model’s initial wrong path and its self-correction using reflection.
+   * Encourages deeper, more coherent reasoning chains.
+   * Reduces nonsensical outputs.
 
----
+3. **Rejection Sampling:**
+   After RL, only the best response* (by reward score) are kept for further fine-tuning.
 
-### 2.4 R1: Cold Start and Multi-Stage RL
+   * Prevents overfitting to bad reasoning samples.
+   * Sharpens logical accuracy.
 
-R1 builds upon R1-Zero by introducing a **multi-stage hybrid training pipeline**:
+#### Why It Works Better
 
-1. **Cold Start (SFT):** a few thousand curated long-CoT samples initialize stability and readability.  
-2. **Reasoning-Oriented RL:** large-scale RL enhances reasoning accuracy and depth.  
-3. **Rejection Sampling Fine-Tuning:** filters the best RL outputs for stable supervised learning.  
-4. **Final RL for All Scenarios:** includes helpfulness and harmlessness alignment.
-
-![Figure: Multi-Stage Training Pipeline](images/multistage_pipeline.png)
-> **Figure Suggestion:** a 4-step pipeline diagram from SFT → RL → RSFT → RL, each labeled with objectives.
+By alternating between **SFT (human clarity)** and **RL (self-improvement)**, R1 finds a balance between human-like reasoning structure and machine-level consistency.It not only reasons well, but explains why it reached an answer in an interpretable `<think>` section.
 
 ---
 
-### 2.5 Distillation: Teaching Smaller Models to Think
+#### Outcome
 
-R1’s final contribution is **distillation** — transferring reasoning knowledge to smaller, dense models like **Qwen** and **Llama** (1.5B–70B).  
-
-These distilled models maintain high reasoning accuracy while cutting compute cost dramatically.  
-For instance, **R1-Distill-Qwen-14B** matches or surpasses **o1-mini (OpenAI)** in math and logic benchmarks.
-
----
-
-## 📊 3. Experimental Results
-
-| Benchmark | o1-mini | R1-Zero | R1 | R1-Distill-Qwen-14B |
-|------------|----------|----------|----------|----------------------|
-| **AIME 2024 (pass@1)** | 63.6 | 71.0 | **79.8** | 69.7 |
-| **MATH-500 (pass@1)** | 90.0 | 95.9 | **97.3** | 94.3 |
-| **GPQA Diamond** | 60.0 | 73.3 | **71.5** | 59.1 |
-| **Codeforces Rating** | 1820 | 1444 | **2029** | 1481 |
-
-> **Insight:** R1’s combination of cold start + RL outperforms pure-RL R1-Zero, showing the importance of hybridization.
+* **Performance:** AIME 2024: **79.8%**, MATH-500: **95.6%**, rivaling OpenAI o1-1217.
+* **Behavior:** Structured, consistent, and interpretable reasoning steps.
+* **Limitation:** Requires multiple fine-tuning stages; still resource-intensive.
 
 ---
 
-## 🔍 4. Critical Analysis
+### DeepSeek-R1-Distill: Teaching Smaller Models to Reason
 
-| Strengths | Limitations |
-|------------|-------------|
-| ✅ Demonstrates *pure RL reasoning emergence* for the first time. | ❌ High compute cost; GRPO is efficient but still expensive. |
-| ✅ Multi-stage hybrid pipeline stabilizes long reasoning chains. | ❌ Some outputs remain verbose or language-mixed. |
-| ✅ Distillation enables lightweight reasoning models. | ❌ Reward design still partly handcrafted; lacks interpretability. |
-| ✅ Emergent self-reflection reveals meta-cognition potential. | ❌ General-domain reasoning (non-STEM) underexplored. |
+**Goal:**
+Transfer the reasoning ability of large R1 models to smaller dense models like **Qwen** and **Llama**, making reasoning affordable and accessible.
 
 ---
 
-## 🌍 5. Impacts and Significance
+#### Distillation Process
 
-**Scientific Impact:**  
-DeepSeek-R1 proves that reasoning can *emerge naturally* from reinforcement learning, opening new directions in AI cognition research.
+1. **Teacher:** DeepSeek-R1 (full model).
+2. **Students:** Smaller dense models (Qwen-1.5B, Qwen-14B, Llama-8B, Llama-70B).
+3. **Method:** Generate ~800k reasoning samples with `<think>` and `<summary>` sections.
 
-**Technological Impact:**  
-Distillation makes powerful reasoning affordable — enabling 7B–14B models to achieve performance comparable to 70B+.
+   * These serve as *teaching material* for the smaller models.
+4. **Training:** Student models learn to imitate both *the reasoning structure* and *final answers*.
 
-**Ethical Impact:**  
-Hybrid RL training introduces better control over reasoning transparency, helping reduce hallucination via structured `<think>` segments.
+#### 📈 Effectiveness
 
-**Research Landscape Shift:**  
-DeepSeek-R1 positions open-source research to directly compete with proprietary reasoning models like OpenAI’s o1.
+| Model                            | AIME 2024 | MATH-500 | GPQA Diamond | Codeforces |
+| -------------------------------- | --------- | -------- | ------------ | ---------- |
+| **GPT-4o**                       | 9.3       | 74.6     | 49.9         | 32.9       |
+| **DeepSeek-R1-Distill-Qwen-14B** | **69.7**  | **94.3** | **59.1**     | **53.1**   |
 
-![Figure: Reasoning Landscape Shift](images/ai_reasoning_landscape.png)
-> **Figure Suggestion:** a timeline showing GPT-4 → o1 → DeepSeek-R1 → R1-Distill, marking the open-source leap.
+This shows that distilled models, though smaller, **outperform many larger non-reasoning LLMs** like GPT-4o.
 
----
-
-## ❓ 6. Audience Questions
-
-**Question 1:**  
-> Why did the researchers move from R1-Zero (pure RL) to R1 (SFT + RL hybrid)?  
-> What trade-offs did this solve?
-
-**Question 2:**  
-> How does GRPO eliminate the critic network, and why does this matter for scaling RL in LLMs?
-
-*(Give classmates 1 minute to discuss before explaining your perspective.)*
-
----
-
-## 🧠 7. Key Takeaways
-
-1. **DeepSeek-R1-Zero** — demonstrated emergent reasoning through *pure reinforcement learning*.  
-2. **DeepSeek-R1** — hybridized SFT and RL, greatly improving readability, stability, and reasoning depth.  
-3. **DeepSeek-R1-Distill** — transferred reasoning capability into *smaller open models*, achieving scalability and accessibility.  
-4. **Core Lesson:** RL can *incentivize reasoning* when guided by structured rewards — no explicit reasoning supervision required.
-
----
-
-## 📚 8. Resource Links
-
-| Type | Link |
-|------|------|
-| 📄 Paper | [arXiv:2501.04508](https://arxiv.org/abs/2501.04508) |
-| 💻 DeepSeek GitHub | [https://github.com/deepseek-ai](https://github.com/deepseek-ai) |
-| 🧮 Benchmarks | [AIME 2024 Dataset](https://maa.org/math-competitions/aime) |
-| 🧩 Related Work | [OpenAI o1 Report](https://openai.com/research/o1) |
-| 🧠 Technical Blog | [DeepSeek-R1 Overview](https://medium.com/@deepseek-ai) |
-
----
-
-## 🧾 9. Citation
-> DeepSeek-AI. *DeepSeek-R1: Incentivizing Reasoning Capability in Large Language Models via Reinforcement Learning.* arXiv preprint arXiv:2501.04508 (2025).
-
----
-
-## 🏁 10. Summary Slide (Visual Suggestion)
-
-![Figure: Summary Slide Visual](images/r1_summary_slide.png)
-> **Figure Suggestion:**  
-> Three blocks horizontally aligned —  
-> **R1-Zero:** Emergent reasoning through RL  
-> **R1:** Hybrid SFT + RL with cold-start data  
-> **R1-Distill:** Efficient small models with transferred reasoning  
 
