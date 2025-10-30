@@ -45,7 +45,7 @@ This paper answers that question by designing a **comprehensive post-training pi
 ![image](image1.png)
 
 #### Model Performance
-- DeepSeek-R1-Zero, achieves **71% → 86.7%** (with majority voting) on AIME 2024, rivaling OpenAI-o1-0912.  
+- DeepSeek-R1-Zero, achieves **71%** on AIME 2024, rivaling OpenAI-o1-0912.  
 - DeepSeek-R1, using a hybrid SFT+RL pipeline, reaches 79.8% on AIME and **95.6%** on MATH-500, surpassing o1-1217.  
 - Distilled versions, such as R1-Distill-Qwen-14B, maintain similar reasoning ability while cutting inference cost dramatically.  
 ---
@@ -96,13 +96,24 @@ Example:
 This spontaneous self-correction, called the **“Aha Moment”**, was not programmed. It emerged naturally from reinforcement learning.
 
 ![image](image2.png)
----
 
 #### Outcome
 
 - **Emergent Reasoning:** Model develops structured, multi-step logical reasoning.
-- **Performance:** On AIME 2024, R1-Zero improved from 15.6% → **71%** pass@1 accuracy.
+- **Performance:** On AIME 2024, R1-Zero improved from **15.6% → 71%** pass@1 accuracy.
 - **Limitation:** Outputs were sometimes verbose or mixed languages; reasoning lacked readability.
+![image](image3.png)
+
+---
+### Question 1:  
+DeepSeek-R1-Zero is trained **without any supervised data**, no human-written reasoning examples or labeled answers. So how can it still learn to reason effectively and even exhibit self-correction behaviors like the “Aha Moment”?
+
+<details>
+<summary> Click to reveal the answer</summary>
+
+DeepSeek-R1-Zero learns reasoning patterns entirely through reinforcement learning feedback. Each generated answer is automatically scored by a rule-based reward model, which checks correctness and logical format.  
+Then, GRPO compares answers within each batch and reinforces the better ones. Over many iterations, this loop rewards structured, accurate reasoning allowing the model to self-discover logical thinking and reflection, even without explicit supervision. The “Aha Moment” emerges naturally from this process, as the model begins to pause, re-evaluate, and correct its own reasoning steps.
+</details>
 
 ---
 
@@ -128,7 +139,7 @@ Make R1-Zero’s powerful reasoning more readable, aligned, and human-like.
    * Reduces nonsensical outputs.
 
 3. **Rejection Sampling:**
-   After RL, only the best response* (by reward score) are kept for further fine-tuning.
+   After RL, only the best response(by reward score) are kept for further fine-tuning.
 
    * Prevents overfitting to bad reasoning samples.
    * Sharpens logical accuracy.
@@ -136,8 +147,6 @@ Make R1-Zero’s powerful reasoning more readable, aligned, and human-like.
 #### Why It Works Better
 
 By alternating between **SFT (human clarity)** and **RL (self-improvement)**, R1 finds a balance between human-like reasoning structure and machine-level consistency.It not only reasons well, but explains why it reached an answer in an interpretable `<think>` section.
-
----
 
 #### Outcome
 
@@ -163,7 +172,7 @@ Transfer the reasoning ability of large R1 models to smaller dense models like *
    * These serve as *teaching material* for the smaller models.
 4. **Training:** Student models learn to imitate both *the reasoning structure* and *final answers*.
 
-#### 📈 Effectiveness
+#### Outcome
 
 | Model                            | AIME 2024 | MATH-500 | GPQA Diamond | Codeforces |
 | -------------------------------- | --------- | -------- | ------------ | ---------- |
@@ -172,4 +181,78 @@ Transfer the reasoning ability of large R1 models to smaller dense models like *
 
 This shows that distilled models, though smaller, **outperform many larger non-reasoning LLMs** like GPT-4o.
 
+---
 
+### Question 2: 
+
+## Impacts
+
+This work matters because it shows that **reasoning is not tied to human-labeled CoT data**. Before this paper, most strong reasoning models were still built on top of big, expensive SFT datasets. DeepSeek-R1-Zero breaks that assumption: it shows that if you design the right reward signals and the right RL objective (GRPO), a pre-trained LLM can grow its own reasoning habits through interaction, not instruction.
+
+Concretely, the impact sits in four layers:
+
+1. **Training paradigm shift**
+
+   * From “collect more CoT → SFT → hope it generalizes”
+   * To “incentivize reasoning at training time → model discovers longer, more reliable chains by itself”.
+     This opens a path to *scalable* reasoning training, because rules are cheaper than human labels.
+
+2. **Inference-time scaling gets a training-time partner**
+   OpenAI showed that you can get better reasoning by letting the model “think longer” at inference. This paper shows the complementary piece: you can train a model so that it naturally chooses to think longer, reflect, and even backtrack. That closes the loop between *test-time reasoning* and *train-time incentives*.
+
+3. **Democratization via distillation**
+   They did not stop at a big model. By distilling R1 into Qwen/Llama small and medium models, they show that **reasoning can be transferred downward** and still beat “vanilla” dense models of similar size. That is important for open-source and for people who cannot run 70B+ models.
+
+4. **Alignment + reasoning at once**
+   Because rewards also include format and language consistency, the model becomes not only better at math/AIME but also **more readable** and **more controllable**. That is useful for downstream agents, tool-using systems, and educational settings.
+
+If we place it in the AI timeline:
+
+* **Past**: SFT + RLHF mainly for alignment / helpfulness.
+* **Present**: test-time reasoning (o1) + structured CoT.
+* **This paper**: RL for reasoning itself → “rewarded thinking”.
+* **Future**: autonomous reasoning curricula, where models design harder tasks for themselves and use rule-based rewards to improve without humans in the loop.
+
+---
+
+## Critical Analysis
+
+### What the Authors Accomplished Well
+
+* **Showed that pure RL is enough to spark reasoning**: this is the central contribution. Starting from DeepSeek-V3-Base and only giving rule-based rewards, the model learned to lengthen its CoT, to reflect, and to fix mistakes. That is a strong empirical claim because many people believed you *must* seed with SFT first.
+* **Made RL actually scalable for LLMs**: PPO-style methods usually need a critic; they replaced it with GRPO, which uses groupwise baselines. That is simpler to implement and cheaper to run, so it lowers the barrier for other labs to try reasoning-RL.
+* **Separated “thinking” from “answer”** through the format reward. That small design decision is what makes their later analysis (e.g. aha moment) even possible, because you can literally see the model’s inner chain.
+* **Closed the loop with distillation**: lots of works stop at “here is a fancy big model”. They went on to show that R1 can *teach* smaller dense models and that those distilled models outperform same-size models that were only SFTed. That makes the work practical.
+
+### What Was Overlooked or Could Be Developed Further
+
+* **Reward is still handcrafted.** The paper explicitly avoids neural reward models because of reward hacking, but the cost is that everything hinges on tasks that can be *rule-checked* (math, code, some logic). For open-ended reasoning (law, ethics, multi-agent), this reward scheme will not be enough.
+* **Readability problems are mostly patched, not solved.** R1-Zero outputs mixed languages and messy CoT; R1 fixes it by adding cold-start SFT and a language-consistency reward. That means the pure-RL story is not fully clean: in practice, you still need *some* supervised signal to make the model human-usable.
+* **Limited analysis of failure modes.** We see the good examples (emergent reflection), but we do not get a systematic breakdown of when RL makes the model *overthink*, produces unnecessarily long chains, or hallucinates justification to match the reward.
+* **Search-based methods were dismissed quickly.** They mention MCTS and process reward models as “unsuccessful attempts,” but these could be revisited with better value models or hybrid test-time search. Right now the comparison feels a bit “we tried once, it was expensive.”
+* **General capability still lags behind DeepSeek-V3.** The authors themselves note that R1 is optimized for Chinese/English reasoning and math-like tasks, but things like tool use, function calling, multi-turn dialogue, or JSON-structured outputs are weaker. That is important if someone wants to deploy this as a general assistant.
+* **Benchmark choice favours reasoning-heavy tasks.** AIME, MATH-500, GPQA Diamond, Codeforces — these are perfect to showcase the method, but they do not tell us how the model behaves on messy, real-world, multi-hop retrieval tasks. A future paper should test whether “rewarded thinking” transfers to those settings.
+* **No ablation on reward weights.** Since the behaviour is emergent, it would be useful to know how sensitive it is to the exact balance of accuracy vs format vs language rewards. Right now it is a bit “we found something that works,” but reproducibility across tasks is not fully demonstrated.
+
+---
+## Code Demo
+
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
+tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-r1-distill-qwen-7b")
+model = AutoModelForCausalLM.from_pretrained(
+    "deepseek-ai/deepseek-r1-distill-qwen-7b", 
+    torch_dtype=torch.float16, device_map="auto"
+)
+
+prompt = "Solve step-by-step: If a number is doubled and increased by 3 gives 11, what is the number?"
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+outputs = model.generate(**inputs, max_new_tokens=200)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+## Resource Links
+1. Original Parpaer:[DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning](https://arxiv.org/abs/2501.12948) - DeepSeek-AI, 2025
+2. Open Source Code: [DeepSeek-R1](https://huggingface.co/deepseek-ai/DeepSeek-R1)
