@@ -42,7 +42,7 @@ This paper answers that question by designing a **comprehensive post-training pi
 | **2** | **DeepSeek-R1** | Adds cold-start SFT data + multi-stage RL pipeline | Improves coherence and stability, matches OpenAI o1-1217 performance | Higher training cost |
 | **3** | **DeepSeek-R1-Distill** | Distills R1’s reasoning into smaller dense models (Qwen / Llama) | Efficient, low-cost reasoning comparable to larger models | Slight drop on hardest benchmarks |
 
-![Figure: DeepSeek-R1 Evolution Overview](images/r1_evolution_diagram.png)
+![Figure: DeepSeek-R1 Evolution Overview](flowchart.png)
 
 #### Model Performance
 - DeepSeek-R1-Zero, achieves **71% → 86.7%** (with majority voting) on AIME 2024, rivaling OpenAI-o1-0912.  
